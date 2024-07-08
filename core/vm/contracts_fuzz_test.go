@@ -1,4 +1,4 @@
-// Copyright 2020 The go-ethereum Authors
+// Copyright 2023 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -14,32 +14,31 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package bls12381
+package vm
 
 import (
-	"errors"
-	"math/big"
+	"testing"
 
 	"github.com/unicornultrafoundation/go-u2u/common"
 )
 
-func bigFromHex(hex string) *big.Int {
-	return new(big.Int).SetBytes(common.FromHex(hex))
-}
-
-// decodeFieldElement expects 64 byte input with zero top 16 bytes,
-// returns lower 48 bytes.
-func decodeFieldElement(in []byte) ([]byte, error) {
-	if len(in) != 64 {
-		return nil, errors.New("invalid field element length")
+func FuzzPrecompiledContracts(f *testing.F) {
+	// Create list of addresses
+	var addrs []common.Address
+	for k := range allPrecompiles {
+		addrs = append(addrs, k)
 	}
-	// check top bytes
-	for i := 0; i < 16; i++ {
-		if in[i] != byte(0x00) {
-			return nil, errors.New("invalid field element top bytes")
+	f.Fuzz(func(t *testing.T, addr uint8, input []byte) {
+		a := addrs[int(addr)%len(addrs)]
+		p := allPrecompiles[a]
+		gas := p.RequiredGas(input)
+		if gas > 10_000_000 {
+			return
 		}
-	}
-	out := make([]byte, 48)
-	copy(out[:], in[16:])
-	return out, nil
+		inWant := string(input)
+		RunPrecompiledContract(p, input, gas)
+		if inHave := string(input); inWant != inHave {
+			t.Errorf("Precompiled %v modified input data", a)
+		}
+	})
 }
